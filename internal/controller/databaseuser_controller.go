@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	"github.com/jackc/pgx/v5"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -27,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"math/rand"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"strings"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,6 +79,12 @@ func (r *DatabaseUserReconciler) Reconcile(ctx context.Context, req ctrl.Request
 		log.Info("Processing MongoDB user", "User", dbUser.Spec.UserName)
 		if err := r.handleMongoDBUser(ctx, dbUser); err != nil {
 			log.Error(err, "Error handling MongoDB user")
+			return ctrl.Result{}, err
+		}
+	case "Postgres":
+		log.Info("Processing Postgres user", "User", dbUser.Spec.UserName)
+		if err := r.handlePostgresUser(ctx, dbUser); err != nil {
+			log.Error(err, "Error handling Postgres user")
 			return ctrl.Result{}, err
 		}
 	default:
@@ -156,6 +165,89 @@ func (r *DatabaseUserReconciler) handleMongoDBUser(ctx context.Context, dbUser *
 	}
 
 	log.Info("Successfully processed MongoDB user", "User", username)
+	return nil
+}
+func quoteLiteral(input string) string {
+	// Properly escape single quotes for SQL
+	return "'" + strings.ReplaceAll(input, "'", "''") + "'"
+}
+
+func (r *DatabaseUserReconciler) handlePostgresUser(ctx context.Context, dbUser *dbv1.DatabaseUser) error {
+	log := log.FromContext(ctx)
+	// Connect to PostgreSQL
+	conn, err := pgx.Connect(ctx, "postgres://zalando:hVWcuJiHHQNUqNhC6njeLKUX1zF9Y0kVeKeagpFaTPSLKdJzLNERvuxv2QhKHOqv@acid-minimal-cluster.zalando.svc.cluster.local/postgres?sslmode=require")
+	if err != nil {
+		log.Error(err, "Unable to connect to PostgreSQL")
+		return err
+	}
+	defer conn.Close(ctx)
+
+	username := dbUser.Spec.UserName
+	password := generateRandomPassword()
+	databaseName := dbUser.Spec.DatabaseName
+
+	// Create or update user
+	_, err = conn.Exec(ctx, "SELECT 1 FROM pg_roles WHERE rolname = $1", username)
+	if err != nil {
+		log.Error(err, "Failed to query user role")
+		return err
+	}
+	createUserSQL := fmt.Sprintf("CREATE USER %s WITH PASSWORD %s", username, quoteLiteral(password))
+	_, err = conn.Exec(ctx, createUserSQL)
+	if err != nil {
+		log.Error(err, "Failed to create PostgreSQL user")
+		return err
+	}
+	log.Info("Created PostgreSQL user successfully")
+
+	createDBSQL := fmt.Sprintf("CREATE DATABASE %s", databaseName)
+	_, err = conn.Exec(ctx, createDBSQL)
+	if err != nil {
+		log.Error(err, "Failed to create PostgreSQL database")
+		return err
+	}
+	log.Info("Created PostgreSQL database successfully", "database", databaseName)
+
+	// Grant read-write privileges to the specific database
+	grnt := fmt.Sprintf("GRANT ALL PRIVILEGES ON DATABASE %s to %s", databaseName, username)
+	_, err = conn.Exec(ctx, grnt)
+	if err != nil {
+		log.Error(err, "Failed to grant privileges on the database to the user")
+		return err
+	}
+
+	// Create/update Kubernetes secret
+	secret := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "postgres-secret-" + username,
+			Namespace: dbUser.Namespace,
+		},
+		StringData: map[string]string{
+			"username": username,
+			"password": password,
+		},
+	}
+	// Set DatabaseUser instance as the owner and controller
+	if err := controllerutil.SetControllerReference(dbUser, secret, r.Scheme); err != nil {
+		return err
+	}
+
+	found := &v1.Secret{}
+	err = r.Get(ctx, types.NamespacedName{Name: secret.Name, Namespace: secret.Namespace}, found)
+	if err != nil &&
+		errors.IsNotFound(err) {
+		log.Info("Creating a new Secret", "Secret.Namespace", secret.Namespace, "Secret.Name", secret.Name)
+		err = r.Create(ctx, secret)
+		if err != nil {
+			log.Error(err, "Failed to create Kubernetes Secret")
+			return err
+		}
+	} else if err != nil {
+		log.Error(err, "Failed to get Secret")
+		return err
+	}
+
+	log.Info("Successfully processed Postgres user", "User", username)
 	return nil
 }
 
