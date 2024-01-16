@@ -1,0 +1,4 @@
+## Append samples of your project ##
+resources:
+- db_v1_databaseuser.yaml
+#+kubebuilder:scaffold:manifestskustomizesamples

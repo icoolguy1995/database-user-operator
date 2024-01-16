@@ -1,0 +1,27 @@
+# permissions for end users to view databaseusers.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: clusterrole
+    app.kubernetes.io/instance: databaseuser-viewer-role
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/created-by: staffbase-operator
+    app.kubernetes.io/part-of: staffbase-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: databaseuser-viewer-role
+rules:
+- apiGroups:
+  - db.staffbase.com
+  resources:
+  - databaseusers
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - db.staffbase.com
+  resources:
+  - databaseusers/status
+  verbs:
+  - get

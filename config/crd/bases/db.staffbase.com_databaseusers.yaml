@@ -1,0 +1,60 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.12.0
+  name: databaseusers.db.staffbase.com
+spec:
+  group: db.staffbase.com
+  names:
+    kind: DatabaseUser
+    listKind: DatabaseUserList
+    plural: databaseusers
+    singular: databaseuser
+  scope: Namespaced
+  versions:
+  - name: v1
+    schema:
+      openAPIV3Schema:
+        description: DatabaseUser is the Schema for the databaseusers API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: DatabaseUserSpec defines the desired state of DatabaseUser
+            properties:
+              databaseName:
+                description: DatabaseName is the name of the database to create the
+                  user in
+                type: string
+              databaseType:
+                description: DatabaseType is the type of database (e.g., MongoDB,
+                  PostgreSQL, MySQL)
+                type: string
+              userName:
+                description: UserName is the name of the User to create the user in
+                type: string
+            required:
+            - databaseName
+            - databaseType
+            - userName
+            type: object
+          status:
+            description: DatabaseUserStatus defines the observed state of DatabaseUser
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

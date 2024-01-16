@@ -1,0 +1,12 @@
+apiVersion: db.staffbase.com/v1
+kind: DatabaseUser
+metadata:
+  labels:
+    app.kubernetes.io/name: databaseuser
+    app.kubernetes.io/instance: databaseuser-sample
+    app.kubernetes.io/part-of: staffbase-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: staffbase-operator
+  name: databaseuser-sample
+spec:
+  # TODO(user): Add fields here
