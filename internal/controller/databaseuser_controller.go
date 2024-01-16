@@ -28,6 +28,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"math/rand"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"strings"
 
@@ -106,9 +107,13 @@ func (r *DatabaseUserReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 func (r *DatabaseUserReconciler) handleMongoDBUser(ctx context.Context, dbUser *dbv1.DatabaseUser) error {
 	log := log.FromContext(ctx)
-
+	mongoHost := os.Getenv("MONGO_CONNECTION_HOST")
+	mongoUsername := os.Getenv("MONGO_USERNAME")
+	mongoPassword := os.Getenv("MONGO_PASSWORD")
+	connectionString := fmt.Sprintf("mongodb://%s:%s@%s/admin?replicaSet=rs0",
+		mongoUsername, mongoPassword, mongoHost)
 	// Connect to MongoDB
-	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://root:password123@mongodb-0.mongodb-headless.mongo-helm.svc.cluster.local:27017,mongodb-1.mongodb-headless.mongo-helm.svc.cluster.local:27017,mongodb-2.mongodb-headless.mongo-helm.svc.cluster.local:27017/admin?replicaSet=rs0"))
+	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(connectionString))
 	if err != nil {
 		log.Error(err, "Unable to connect to MongoDB")
 		return err
@@ -133,6 +138,8 @@ func (r *DatabaseUserReconciler) handleMongoDBUser(ctx context.Context, dbUser *
 		log.Error(result.Err(), "Failed to create MongoDB user")
 		return result.Err()
 	}
+	secretString := fmt.Sprintf("mongodb://%s:%s@%s/%s?replicaSet=rs0",
+		username, password, mongoHost, dbUser.Spec.DatabaseName)
 
 	// Create/update Kubernetes secret
 	secret := &v1.Secret{
@@ -143,6 +150,7 @@ func (r *DatabaseUserReconciler) handleMongoDBUser(ctx context.Context, dbUser *
 		StringData: map[string]string{
 			"username": username,
 			"password": password,
+			"url":      secretString,
 		},
 	}
 	// Set DatabaseUser instance as the owner and controller
@@ -174,8 +182,15 @@ func quoteLiteral(input string) string {
 
 func (r *DatabaseUserReconciler) handlePostgresUser(ctx context.Context, dbUser *dbv1.DatabaseUser) error {
 	log := log.FromContext(ctx)
+	postgresHost := os.Getenv("POSTGRES_CONNECTION_HOST")
+	postgresUsername := os.Getenv("POSTGRES_USERNAME")
+	postgresPassword := os.Getenv("POSTGRES_PASSWORD")
+
+	// Construct the PostgreSQL connection string
+	connectionString := fmt.Sprintf("postgres://%s:%s@%s/postgres?sslmode=require",
+		postgresUsername, postgresPassword, postgresHost)
 	// Connect to PostgreSQL
-	conn, err := pgx.Connect(ctx, "postgres://zalando:hVWcuJiHHQNUqNhC6njeLKUX1zF9Y0kVeKeagpFaTPSLKdJzLNERvuxv2QhKHOqv@acid-minimal-cluster.zalando.svc.cluster.local/postgres?sslmode=require")
+	conn, err := pgx.Connect(ctx, connectionString)
 	if err != nil {
 		log.Error(err, "Unable to connect to PostgreSQL")
 		return err
@@ -217,6 +232,8 @@ func (r *DatabaseUserReconciler) handlePostgresUser(ctx context.Context, dbUser 
 	}
 
 	// Create/update Kubernetes secret
+	secretConnectionString := fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=require",
+		username, password, postgresHost, databaseName)
 	secret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "postgres-secret-" + username,
@@ -225,6 +242,7 @@ func (r *DatabaseUserReconciler) handlePostgresUser(ctx context.Context, dbUser 
 		StringData: map[string]string{
 			"username": username,
 			"password": password,
+			"url":      secretConnectionString,
 		},
 	}
 	// Set DatabaseUser instance as the owner and controller

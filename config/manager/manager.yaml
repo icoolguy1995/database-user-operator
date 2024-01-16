@@ -72,6 +72,19 @@ spec:
         - --leader-elect
         image: controller:latest
         name: manager
+        env:
+          - name: POSTGRES_CONNECTION_HOST
+            value: "acid-minimal-cluster.zalando.svc.cluster.local"
+          - name: POSTGRES_USERNAME
+            value: "zalando"
+          - name: POSTGRES_PASSWORD
+            value: "hVWcuJiHHQNUqNhC6njeLKUX1zF9Y0kVeKeagpFaTPSLKdJzLNERvuxv2QhKHOqv"
+          - name: MONGO_CONNECTION_HOST
+            value: "mongodb-0.mongodb-headless.mongo-helm.svc.cluster.local:27017,mongodb-1.mongodb-headless.mongo-helm.svc.cluster.local:27017,mongodb-2.mongodb-headless.mongo-helm.svc.cluster.local:27017"
+          - name: MONGO_USERNAME
+            value: "root"
+          - name: MONGO_PASSWORD
+            value: "password123"
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
